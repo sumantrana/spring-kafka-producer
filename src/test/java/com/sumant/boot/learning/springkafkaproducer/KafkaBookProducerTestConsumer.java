@@ -1,6 +1,7 @@
 package com.sumant.boot.learning.springkafkaproducer;
 
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,9 +16,11 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
+import java.util.Collections;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,7 +29,6 @@ import static org.springframework.kafka.test.assertj.KafkaConditions.key;
 import static org.springframework.kafka.test.hamcrest.KafkaMatchers.hasValue;
 
 @SpringBootTest
-@ExtendWith(SpringExtension.class)
 @EmbeddedKafka(partitions = 1, topics = {"${book.topic}"})
 public class KafkaBookProducerTestConsumer {
 
@@ -43,15 +45,15 @@ public class KafkaBookProducerTestConsumer {
 
     private Consumer<String, Book> consumer;
 
-
-
     @BeforeEach
     public void setUp() throws Exception {
 
+        //Not required as we have the topic added to the main annotation
         //embeddedKafkaBroker.addTopics(senderTopic);
 
         // set up the Kafka consumer properties
         Map<String, Object> consumerProperties = KafkaTestUtils.consumerProps("sender", "false", embeddedKafkaBroker);
+        consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
         // create a Kafka consumer factory
         DefaultKafkaConsumerFactory<String, Book> consumerFactory =
@@ -59,7 +61,9 @@ public class KafkaBookProducerTestConsumer {
                         consumerProperties, new StringDeserializer(), new JsonDeserializer<>(Book.class));
 
         consumer = consumerFactory.createConsumer();
-        embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, senderTopic);
+        consumer.subscribe(Collections.singleton(senderTopic));
+        //consumer.poll(0);
+        //embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, senderTopic);
 
     }
 
@@ -71,7 +75,7 @@ public class KafkaBookProducerTestConsumer {
         producer.sendBookMessage(messageBook);
 
         // check that the message was received
-        ConsumerRecord<String, Book> received = KafkaTestUtils.getSingleRecord(consumer, senderTopic);
+        ConsumerRecord<String, Book> received = KafkaTestUtils.getSingleRecord(consumer, senderTopic, 1000);
 
         // Hamcrest Matchers to check the value
         assertThat(received, hasValue(messageBook));
